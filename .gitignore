@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+*.zip
+*.crx
+*.pem
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets/
+credentials.json
+.chrome-webstore-key
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Cache
+.cache/
+.vite/
+.turbo/
+coverage/
+
+# Local settings
+.claude/settings.local.json
