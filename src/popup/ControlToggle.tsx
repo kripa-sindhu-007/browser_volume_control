@@ -11,21 +11,21 @@ export function ControlToggle({
 }): JSX.Element {
   if (status === 'unavailable') {
     return (
-      <button className="btn btn--ctl" type="button" disabled>
-        no audio
+      <button className="btn" type="button" disabled>
+        Unavailable
       </button>
     );
   }
   if (status === 'inactive') {
     return (
-      <button className="btn btn--ctl btn--primary" type="button" onClick={onEnable}>
-        enable
+      <button className="btn btn--primary" type="button" onClick={onEnable}>
+        Enable
       </button>
     );
   }
   return (
-    <button className="btn btn--ctl" type="button" onClick={onDisable}>
-      stop control
+    <button className="btn" type="button" onClick={onDisable}>
+      Stop
     </button>
   );
 }

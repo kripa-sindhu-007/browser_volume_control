@@ -15,7 +15,7 @@ export function MuteToggle({
       data-muted={muted}
       onClick={() => onToggle(!muted)}
     >
-      {muted ? 'unmute' : 'mute'}
+      {muted ? 'Unmute' : 'Mute'}
     </button>
   );
 }
