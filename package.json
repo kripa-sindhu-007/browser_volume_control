@@ -3,7 +3,29 @@
   "version": "0.1.0",
   "private": true,
   "description": "Per-tab volume control browser extension",
+  "license": "MIT",
+  "author": "Kripa Sindhu",
   "type": "module",
+  "homepage": "https://github.com/kripa-sindhu-007/browser_volume_control#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kripa-sindhu-007/browser_volume_control.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kripa-sindhu-007/browser_volume_control/issues"
+  },
+  "overrides": {
+    "@crxjs/vite-plugin": {
+      "rollup": "2.80.0"
+    }
+  },
+  "keywords": [
+    "chrome-extension",
+    "browser-extension",
+    "volume-control",
+    "audio",
+    "manifest-v3"
+  ],
   "scripts": {
     "dev": "vite build --watch --mode development",
     "build": "tsc --noEmit && vite build",
@@ -15,12 +37,13 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.0.0-beta.25",
+    "@crxjs/vite-plugin": "^2.4.0",
     "@types/chrome": "^0.0.268",
+    "@types/node": "^24.12.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.5.3",
-    "vite": "^5.3.3"
+    "vite": "^6.4.2"
   }
 }

@@ -43,3 +43,4 @@ coverage/
 
 # Local settings
 .claude/settings.local.json
+.agents/
