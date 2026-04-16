@@ -74,12 +74,24 @@ export class AudioController {
   }
 
   probeMedia(): boolean {
-    return document.querySelectorAll('audio, video').length > 0;
+    return this.findAllMedia().length > 0;
+  }
+
+  /** Finds media elements in both light DOM and open Shadow DOM roots. */
+  private findAllMedia(): HTMLMediaElement[] {
+    const found: HTMLMediaElement[] = [];
+    const walk = (root: Document | ShadowRoot | Element): void => {
+      root.querySelectorAll<HTMLMediaElement>('audio, video').forEach((el) => found.push(el));
+      root.querySelectorAll('*').forEach((el) => {
+        if (el.shadowRoot) walk(el.shadowRoot);
+      });
+    };
+    walk(document);
+    return found;
   }
 
   private attachAllExisting(): void {
-    const els = document.querySelectorAll<HTMLMediaElement>('audio, video');
-    els.forEach((el) => this.attach(el));
+    this.findAllMedia().forEach((el) => this.attach(el));
   }
 
   private attach(el: HTMLMediaElement): void {
@@ -96,32 +108,84 @@ export class AudioController {
     }
   }
 
-  private startObserver(): void {
-    this.observer = new MutationObserver((muts) => {
-      let changed = false;
-      for (const m of muts) {
-        m.addedNodes.forEach((n) => {
-          if (n instanceof HTMLMediaElement) {
-            this.attach(n);
+  private shadowObservers: MutationObserver[] = [];
+
+  /** Observe a root (document or shadow root) for new media elements. */
+  private observeRoot(root: Document | ShadowRoot): void {
+    const obs = root === document ? this.observer! : new MutationObserver((muts) => this.handleMutations(muts));
+    if (root !== document) this.shadowObservers.push(obs);
+    obs.observe(root === document ? document.documentElement : root, { childList: true, subtree: true });
+  }
+
+  /** Watch an element for shadow root attachment and observe new shadow roots. */
+  private watchForShadow(el: Element): void {
+    if (el.shadowRoot) {
+      this.observeRoot(el.shadowRoot);
+      el.shadowRoot.querySelectorAll<HTMLMediaElement>('audio, video').forEach((m) => this.attach(m));
+      // Recurse into shadow root children
+      el.shadowRoot.querySelectorAll('*').forEach((child) => this.watchForShadow(child));
+    }
+  }
+
+  private handleMutations(muts: MutationRecord[]): void {
+    let changed = false;
+    for (const m of muts) {
+      m.addedNodes.forEach((n) => {
+        if (n instanceof HTMLMediaElement) {
+          this.attach(n);
+          changed = true;
+        } else if (n instanceof Element) {
+          n.querySelectorAll<HTMLMediaElement>('audio, video').forEach((el) => {
+            this.attach(el);
             changed = true;
-          } else if (n instanceof Element) {
-            n.querySelectorAll<HTMLMediaElement>('audio, video').forEach((el) => {
-              this.attach(el);
-              changed = true;
-            });
-          }
-        });
-      }
-      if (changed) {
-        sendToBgFromContent({ type: 'CT_MEDIA_CHANGED', hasMedia: this.probeMedia() });
-      }
-    });
+          });
+          // Also check for shadow roots on new elements
+          this.watchForShadow(n);
+          n.querySelectorAll('*').forEach((child) => this.watchForShadow(child));
+        }
+      });
+    }
+    if (changed) {
+      sendToBgFromContent({ type: 'CT_MEDIA_CHANGED', hasMedia: this.probeMedia() });
+    }
+  }
+
+  private probeTimer: number | null = null;
+
+  private startObserver(): void {
+    this.observer = new MutationObserver((muts) => this.handleMutations(muts));
     this.observer.observe(document.documentElement, { childList: true, subtree: true });
+    // Observe any existing shadow roots
+    document.querySelectorAll('*').forEach((el) => this.watchForShadow(el));
+
+    // Re-probe periodically for late-arriving media (WebRTC, lazy SPAs like Google Meet)
+    if (!this.probeMedia()) {
+      let probeCount = 0;
+      this.probeTimer = window.setInterval(() => {
+        probeCount++;
+        if (this.probeMedia()) {
+          sendToBgFromContent({ type: 'CT_MEDIA_CHANGED', hasMedia: true });
+          if (this.probeTimer != null) window.clearInterval(this.probeTimer);
+          this.probeTimer = null;
+        }
+        // Stop after 60 seconds (30 probes × 2s)
+        if (probeCount >= 30) {
+          if (this.probeTimer != null) window.clearInterval(this.probeTimer);
+          this.probeTimer = null;
+        }
+      }, 2000);
+    }
   }
 
   private stopObserver(): void {
     this.observer?.disconnect();
     this.observer = null;
+    for (const obs of this.shadowObservers) obs.disconnect();
+    this.shadowObservers = [];
+    if (this.probeTimer != null) {
+      window.clearInterval(this.probeTimer);
+      this.probeTimer = null;
+    }
   }
 
   private startRmsTicker(): void {

@@ -69,16 +69,35 @@ async function handlePopupMessage(
 
     case 'ENABLE_CONTROL': {
       if (!state.origin) return { error: 'unsupported-page' };
-      try {
-        await sendToTab(tabId, { type: 'BG_ENABLE' });
-        await sendToTab(tabId, { type: 'BG_SET_GAIN', gain: state.gain });
-        state.status = 'active';
-      } catch {
-        state.status = 'unavailable';
-        return { error: 'content-unreachable' };
+      // Try to reach the content script; if it fails, inject it programmatically and retry.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await sendToTab(tabId, { type: 'BG_ENABLE' });
+          await sendToTab(tabId, { type: 'BG_SET_GAIN', gain: state.gain });
+          state.status = 'active';
+          broadcastState(state);
+          return state;
+        } catch {
+          if (attempt === 0) {
+            // Content script not reachable — inject it programmatically and retry.
+            try {
+              const manifest = chrome.runtime.getManifest();
+              const contentJs = manifest.content_scripts?.[0]?.js ?? [];
+              await chrome.scripting.executeScript({
+                target: { tabId },
+                files: contentJs,
+              });
+              // Give the content script a moment to initialise its listener.
+              await new Promise((r) => setTimeout(r, 300));
+            } catch {
+              // Injection itself failed (e.g. chrome:// page).
+            }
+          }
+        }
       }
+      state.status = 'unavailable';
       broadcastState(state);
-      return state;
+      return { error: 'content-unreachable' };
     }
 
     case 'DISABLE_CONTROL': {
@@ -137,8 +156,8 @@ async function handlePopupMessage(
   }
 }
 
-function handleContentMessage(msg: ContentToBg, tabId: number): void {
-  const state = getOrCreate(tabId);
+function handleContentMessage(msg: ContentToBg, tabId: number, url?: string): void {
+  const state = getOrCreate(tabId, url);
   switch (msg.type) {
     case 'CT_READY':
     case 'CT_MEDIA_CHANGED':
@@ -166,7 +185,7 @@ chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
 
   // Content script messages arrive with sender.tab
   if (sender.tab?.id != null) {
-    handleContentMessage(msg as ContentToBg, sender.tab.id);
+    handleContentMessage(msg as ContentToBg, sender.tab.id, sender.tab.url);
     return;
   }
 
@@ -175,6 +194,14 @@ chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return sendResponse({ error: 'no-active-tab' });
     const st = getOrCreate(tab.id, tab.url);
+    // Sync the live audible flag — the onUpdated event only fires on changes,
+    // so we may have missed it if the tab was already audible.
+    if (tab.audible) {
+      st.hasMedia = true;
+    }
+    if (st.status === 'unavailable' && st.hasMedia && st.origin) {
+      st.status = 'inactive';
+    }
     const result = await handlePopupMessage(msg as PopupToBg, tab.id);
     sendResponse(result ?? st);
   })();
@@ -205,8 +232,23 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       prev.origin = newOrigin;
     }
   }
+  // Chrome's audible flag is the most reliable way to know a tab has audio
+  // (covers WebRTC, Shadow DOM video elements, etc.)
+  if (changeInfo.audible != null) {
+    const s = getOrCreate(tabId, tab.url);
+    if (changeInfo.audible) {
+      s.hasMedia = true;
+    }
+    if (s.status === 'unavailable' && s.hasMedia && s.origin) {
+      s.status = 'inactive';
+    }
+    broadcastState(s);
+  }
   if (changeInfo.status === 'complete' && tab.url) {
     const s = getOrCreate(tabId, tab.url);
+    if (s.status === 'unavailable' && s.hasMedia && s.origin) {
+      s.status = 'inactive';
+    }
     broadcastState(s);
   }
 });

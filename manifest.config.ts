@@ -24,7 +24,7 @@ export default defineManifest({
     },
   ],
   permissions: ['activeTab', 'tabs', 'scripting'],
-  host_permissions: [],
+  host_permissions: ['<all_urls>'],
   web_accessible_resources: [],
   content_security_policy: {
     extension_pages: "script-src 'self'; object-src 'self'; base-uri 'self'; frame-ancestors 'none';",
